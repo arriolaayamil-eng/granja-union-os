@@ -110,7 +110,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   const doLogout = () => {
     logout();
-    navigate({ to: "/admin/login" });
+    navigate({ to: "/login" });
   };
 
   const NavList = ({ onClick }: { onClick?: () => void }) => (
