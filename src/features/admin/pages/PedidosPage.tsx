@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -44,6 +44,10 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth-store";
 import { ZONES, ZONE_LABELS } from "@/lib/api/types";
 import type { Sale, SaleStatus, ZoneValue } from "@/lib/api/types";
+
+// Ocultados por pedido puntual — el código queda intacto para reactivar fácil.
+const SHOW_POS_TAB = false;
+const SHOW_ZONE_FILTER = false;
 
 const STATUS_FILTERS = [
   { value: "paid,en_preparacion", label: "Pedidos por entregar" },
@@ -107,29 +111,18 @@ export function PedidosPage() {
 
   return (
     <div>
-      <PageHeader title="Pedidos" subtitle="Pedidos web y venta en mostrador" />
+      <PageHeader title="Pedidos" subtitle="Pedidos web en tiempo real" />
 
-      <Tabs defaultValue="web">
-        <TabsList>
-          <TabsTrigger value="web">Pedidos web</TabsTrigger>
-          <TabsTrigger value="pos">POS (mostrador)</TabsTrigger>
-        </TabsList>
-
-        {/* ── Pedidos web ── */}
-        <TabsContent value="web" className="mt-4 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTERS.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs value={filter} onValueChange={setFilter}>
+            <TabsList className="h-auto flex-wrap">
+              {STATUS_FILTERS.map((f) => (
+                <TabsTrigger key={f.value} value={f.value}>{f.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {SHOW_ZONE_FILTER && (
             <Select value={zonaFilter} onValueChange={setZonaFilter}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue />
@@ -141,69 +134,66 @@ export function PedidosPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          {isLoading && <ListSkeleton />}
-          {isError && <ErrorState onRetry={refetch} />}
-          {sales && sales.length === 0 && <EmptyState message="No hay pedidos con este filtro" />}
-
-          {sales && sales.length > 0 && (
-            <div className="space-y-2">
-              {sales.map((s) => {
-                const next = NEXT_ACTION[s.status];
-                return (
-                  <Card key={s.id} className="cursor-pointer transition-colors hover:bg-muted/40" onClick={() => setDetail(s)}>
-                    <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold">{s.code}</span>
-                          <StatusBadge status={s.status} />
-                          {isGeneral && <span className="text-xs text-muted-foreground">· {branchName(s.branchId)}</span>}
-                        </div>
-                        <p className="mt-1 truncate text-sm text-muted-foreground">
-                          {s.customer.nombre} · <ZoneLabel zona={s.customer.zona} /> · {formatDate(s.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <span className="font-bold tabular-nums">{formatCurrency(s.total)}</span>
-                        {next && (
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmAction({ sale: s, to: next.to, label: next.label });
-                            }}
-                          >
-                            {next.label}
-                          </Button>
-                        )}
-                        {canCancel(s.status) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmAction({ sale: s, to: "cancelled", label: "Cancelar pedido" });
-                            }}
-                          >
-                            Cancelar
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
           )}
-        </TabsContent>
+        </div>
 
-        {/* ── POS estructura lista ── */}
-        <TabsContent value="pos" className="mt-4">
-          <PosPlaceholder />
-        </TabsContent>
-      </Tabs>
+        {isLoading && <ListSkeleton />}
+        {isError && <ErrorState onRetry={refetch} />}
+        {sales && sales.length === 0 && <EmptyState message="No hay pedidos con este filtro" />}
+
+        {sales && sales.length > 0 && (
+          <div className="space-y-2">
+            {sales.map((s) => {
+              const next = NEXT_ACTION[s.status];
+              return (
+                <Card key={s.id} className="cursor-pointer transition-colors hover:bg-muted/40" onClick={() => setDetail(s)}>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{s.code}</span>
+                        <StatusBadge status={s.status} />
+                        {isGeneral && <span className="text-xs text-muted-foreground">· {branchName(s.branchId)}</span>}
+                      </div>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                        {s.customer.nombre} · <ZoneLabel zona={s.customer.zona} /> · {formatDate(s.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="font-bold tabular-nums">{formatCurrency(s.total)}</span>
+                      {next && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmAction({ sale: s, to: next.to, label: next.label });
+                          }}
+                        >
+                          {next.label}
+                        </Button>
+                      )}
+                      {canCancel(s.status) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmAction({ sale: s, to: "cancelled", label: "Cancelar pedido" });
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {SHOW_POS_TAB && <PosPlaceholder />}
 
       {/* Confirmación simple de transición */}
       <AlertDialog open={!!confirmAction} onOpenChange={(o) => !o && setConfirmAction(null)}>
