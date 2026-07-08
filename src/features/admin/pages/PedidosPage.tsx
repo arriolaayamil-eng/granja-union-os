@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { MessageCircle, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -386,6 +388,7 @@ function PipelineBoard({
     queryFn: () => getSales(activeBranch, "paid,en_preparacion,en_camino,entregado,fulfilled,cancelled"),
   });
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const [activeSale, setActiveSale] = useState<Sale | null>(null);
 
   if (isLoading) return <ListSkeleton />;
   if (isError) return <ErrorState onRetry={refetch} />;
@@ -397,7 +400,13 @@ function PipelineBoard({
     if (grouped[col]) grouped[col].push(s);
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const sale = (sales ?? []).find((s) => s.id === String(event.active.id));
+    setActiveSale(sale ?? null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setActiveSale(null);
     const saleId = String(event.active.id);
     const fromRaw = event.active.data.current?.status as SaleStatus | undefined;
     const toStatus = event.over ? String(event.over.id) : null;
@@ -418,7 +427,7 @@ function PipelineBoard({
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveSale(null)}>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {PIPELINE_COLUMNS.map((col) => (
           <PipelineColumn
@@ -432,6 +441,11 @@ function PipelineBoard({
           />
         ))}
       </div>
+      <DragOverlay>
+        {activeSale && (
+          <PipelineCard sale={activeSale} draggable={false} isGeneral={isGeneral} branchName={branchName} onOpen={() => {}} overlay />
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -480,30 +494,34 @@ function PipelineCard({
   isGeneral,
   branchName,
   onOpen,
+  overlay = false,
 }: {
   sale: Sale;
   draggable: boolean;
   isGeneral: boolean;
   branchName: (id: string) => string;
   onOpen: (sale: Sale) => void;
+  overlay?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  // La card "fantasma" que queda en la columna de origen mientras se arrastra usa este mismo hook
+  // (mismo id) para saber que está siendo arrastrada; la que realmente sigue el mouse es la copia
+  // que se renderiza en <DragOverlay> (por eso acá nunca le pasamos su propio ref/listeners).
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: sale.id,
     data: { status: sale.status },
-    disabled: !draggable,
+    disabled: !draggable || overlay,
   });
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...(draggable ? { ...attributes, ...listeners } : {})}
-      onClick={() => onOpen(sale)}
+      ref={overlay ? undefined : setNodeRef}
+      {...(draggable && !overlay ? { ...attributes, ...listeners } : {})}
+      onClick={overlay ? undefined : () => onOpen(sale)}
       className={cn(
         "rounded-lg border bg-card p-3 text-sm shadow-sm select-none",
-        draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
-        isDragging && "z-10 opacity-60 shadow-md",
+        draggable && !overlay ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
+        isDragging && !overlay && "opacity-30",
+        overlay && "rotate-1 shadow-lg ring-2 ring-primary/30",
       )}
     >
       <div className="flex items-center justify-between gap-2">
