@@ -19,6 +19,7 @@ import type {
   StockMovement,
   Supplier,
   User,
+  ZoneValue,
 } from "@/lib/api/types";
 
 // ── Fechas relativas para que los mocks siempre luzcan "actuales" ──
@@ -154,6 +155,7 @@ export const customers: Customer[] = [
     phone: "+542254511111",
     email: "laura@mail.com",
     address: "Calle 12 esq. 3, Ostende",
+    zona: "OSTENDE",
     docTipo: "DNI",
     docNro: "28345678",
     condicionIVA: "Consumidor Final",
@@ -165,6 +167,7 @@ export const customers: Customer[] = [
     phone: "+542254522222",
     email: "compras@elfaro.com",
     address: "Av. Bunge 200, Pinamar",
+    zona: "PINAMAR_CENTRO",
     docTipo: "CUIT",
     docNro: "30712345678",
     condicionIVA: "Responsable Inscripto",
@@ -175,6 +178,7 @@ export const customers: Customer[] = [
     phone: "+542254533333",
     email: "juanp@mail.com",
     address: "Los Pinos 45, Valeria del Mar",
+    zona: "VALERIA_DEL_MAR",
     docTipo: "DNI",
     docNro: "35111222",
     condicionIVA: "Consumidor Final",
@@ -185,6 +189,7 @@ export const customers: Customer[] = [
     phone: "+542254544444",
     email: "doncarlos@mail.com",
     address: "Av. del Mar 900, Valeria del Mar",
+    zona: "PINAMAR_NORTE",
     docTipo: "CUIT",
     docNro: "20223344556",
     condicionIVA: "Monotributo",
@@ -212,6 +217,7 @@ const mkSale = (
   status: Sale["status"],
   createdAt: string,
   shipping = 0,
+  customerId?: string,
 ): Sale => {
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   return {
@@ -220,6 +226,7 @@ const mkSale = (
     branchId,
     channel,
     items,
+    customerId,
     customer,
     subtotal,
     discount: 0,
@@ -229,10 +236,12 @@ const mkSale = (
     paymentStatus,
     mp: paymentMethod === "mp" ? { preferenceId: "pref_" + id, paymentId: "pay_" + id } : {},
     status,
+    statusHistory: [{ status, at: createdAt }],
+    geo: undefined,
     createdAt,
   };
 };
-const cust = (nombre: string, telefono: string, direccion: string, zona: string, aclaraciones = ""): Sale["customer"] => ({
+const cust = (nombre: string, telefono: string, direccion: string, zona: ZoneValue, aclaraciones = ""): Sale["customer"] => ({
   nombre,
   telefono,
   direccion,
@@ -241,14 +250,14 @@ const cust = (nombre: string, telefono: string, direccion: string, zona: string,
 });
 
 export const sales: Sale[] = [
-  mkSale("s1", "WEB-1042", "b1", "online", [item(products[1], 2), item(products[12], 1)], cust("Laura Gómez", "+542254511111", "Calle 12 esq. 3", "Ostende centro", "Sin menudos"), "mp", "paid", "paid", hoursAgo(3), 1500),
-  mkSale("s2", "WEB-1043", "b1", "online", [item(products[0], 1.5), item(products[9], 1)], cust("Juan Pérez", "+542254533333", "Los Pinos 45", "Valeria"), "mp", "pending", "pending_payment", hoursAgo(1), 1500),
-  mkSale("s3", "WEB-1044", "b3", "online", [item(products[16], 1)], cust("Parrilla Don Carlos", "+542254544444", "Av. del Mar 900", "Pinamar norte"), "mp", "paid", "paid", hoursAgo(6), 0),
-  mkSale("s4", "WEB-1045", "b2", "online", [item(products[3], 1)], cust("Sofía Ruiz", "+542254566666", "Calle 40 120", "Valeria"), "mp", "rejected", "rejected", hoursAgo(20)),
-  mkSale("s5", "POS-3301", "b1", "pos", [item(products[2], 2.3), item(products[12], 2)], cust("Mostrador", "", "", "Mostrador"), "efectivo", "paid", "fulfilled", hoursAgo(4)),
-  mkSale("s6", "POS-3302", "b3", "pos", [item(products[7], 1.2)], cust("Mostrador", "", "", "Mostrador"), "debito", "paid", "fulfilled", daysAgo(1)),
-  mkSale("s7", "WEB-1041", "b1", "online", [item(products[17], 2)], cust("Laura Gómez", "+542254511111", "Calle 12 esq. 3", "Ostende centro"), "mp", "paid", "fulfilled", daysAgo(1), 1500),
-  mkSale("s8", "WEB-1046", "b2", "online", [item(products[10], 1), item(products[12], 1)], cust("Marina López", "+542254577777", "Av. Mar 33", "Valeria centro", "Tocar timbre 2"), "mp", "paid", "paid", hoursAgo(2), 1200),
+  mkSale("s1", "WEB-1042", "b1", "online", [item(products[1], 2), item(products[12], 1)], cust("Laura Gómez", "+542254511111", "Calle 12 esq. 3", "OSTENDE", "Sin menudos"), "mp", "paid", "paid", hoursAgo(3), 1500, "c1"),
+  mkSale("s2", "WEB-1043", "b1", "online", [item(products[0], 1.5), item(products[9], 1)], cust("Juan Pérez", "+542254533333", "Los Pinos 45", "VALERIA_DEL_MAR"), "mp", "pending", "pending_payment", hoursAgo(1), 1500, "c3"),
+  mkSale("s3", "WEB-1044", "b3", "online", [item(products[16], 1)], cust("Parrilla Don Carlos", "+542254544444", "Av. del Mar 900", "PINAMAR_NORTE"), "mp", "paid", "en_preparacion", hoursAgo(6), 0, "c4"),
+  mkSale("s4", "WEB-1045", "b2", "online", [item(products[3], 1)], cust("Sofía Ruiz", "+542254566666", "Calle 40 120", "VALERIA_DEL_MAR"), "mp", "rejected", "rejected", hoursAgo(20)),
+  mkSale("s5", "POS-3301", "b1", "pos", [item(products[2], 2.3), item(products[12], 2)], cust("Mostrador", "", "", "OTRA"), "efectivo", "paid", "fulfilled", hoursAgo(4)),
+  mkSale("s6", "POS-3302", "b3", "pos", [item(products[7], 1.2)], cust("Mostrador", "", "", "OTRA"), "debito", "paid", "fulfilled", daysAgo(1)),
+  mkSale("s7", "WEB-1041", "b1", "online", [item(products[17], 2)], cust("Laura Gómez", "+542254511111", "Calle 12 esq. 3", "OSTENDE"), "mp", "paid", "entregado", daysAgo(1), 1500, "c1"),
+  mkSale("s8", "WEB-1046", "b2", "online", [item(products[10], 1), item(products[12], 1)], cust("Marina López", "+542254577777", "Av. Mar 33", "VALERIA_DEL_MAR", "Tocar timbre 2"), "mp", "paid", "en_camino", hoursAgo(2), 1200),
 ];
 
 // ── Caja ──
@@ -335,15 +344,23 @@ export const fiscalConfig: FiscalConfig = {
 };
 
 // ── Configuración ──
+const openDay = (open = "08:00", close = "21:00") => ({ open, close, closed: false });
 export const settings: Settings = {
   zones: [
-    { name: "Ostende centro", cost: 1500, active: true },
-    { name: "Valeria centro", cost: 1200, active: true },
-    { name: "Pinamar norte", cost: 1800, active: true },
-    { name: "Pinamar sur", cost: 2200, active: true },
+    { name: "CARILO", cost: 2200, active: true },
+    { name: "PINAMAR_NORTE", cost: 1800, active: true },
+    { name: "PINAMAR_CENTRO", cost: 1500, active: true },
+    { name: "OSTENDE", cost: 1500, active: true },
+    { name: "VALERIA_DEL_MAR", cost: 1200, active: true },
+    { name: "OTRA", cost: 2500, active: false },
   ],
   freeShippingFrom: 25000,
   minOrder: 8000,
+  schedule: {
+    lunes: openDay(), martes: openDay(), miercoles: openDay(), jueves: openDay(),
+    viernes: openDay(), sabado: openDay(), domingo: { open: "09:00", close: "14:00", closed: false },
+  },
+  forceClosed: false,
 };
 export const business: Business = {
   brand: "Granja La Unión",
@@ -351,6 +368,7 @@ export const business: Business = {
   whatsapp: "+542254480001",
   phone: "+542254480001",
   email: "avisos@granjalaunion.com",
+  address: "Víctor Hugo 1648, Ostende – Pinamar",
   hours: "Lun a Dom 8:00 a 21:00",
   branches: branches.map((b) => ({ id: b.id, name: b.name, address: b.address, mapsUrl: b.mapsUrl })),
 };

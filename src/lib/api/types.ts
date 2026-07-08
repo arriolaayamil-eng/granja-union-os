@@ -54,9 +54,23 @@ export type PaymentMethod = "mp" | "efectivo" | "transferencia" | "debito";
 export type SaleStatus =
   | "pending_payment"
   | "paid"
-  | "fulfilled"
+  | "en_preparacion"
+  | "en_camino"
+  | "entregado"
+  | "fulfilled" // legacy, equivalente a "entregado"
   | "cancelled"
   | "rejected";
+
+export const ZONES = ["CARILO", "PINAMAR_NORTE", "PINAMAR_CENTRO", "OSTENDE", "VALERIA_DEL_MAR", "OTRA"] as const;
+export type ZoneValue = (typeof ZONES)[number];
+export const ZONE_LABELS: Record<ZoneValue, string> = {
+  CARILO: "Cariló",
+  PINAMAR_NORTE: "Pinamar Norte",
+  PINAMAR_CENTRO: "Pinamar Centro",
+  OSTENDE: "Ostende",
+  VALERIA_DEL_MAR: "Valeria del Mar",
+  OTRA: "Otra",
+};
 
 export interface SaleItem {
   productId: string;
@@ -65,6 +79,11 @@ export interface SaleItem {
   price: number;
   unit: string;
   taxRate: number;
+}
+
+export interface StatusHistoryEntry {
+  status: SaleStatus;
+  at: string;
 }
 
 export interface Sale {
@@ -78,7 +97,7 @@ export interface Sale {
     nombre: string;
     telefono: string;
     direccion: string;
-    zona: string;
+    zona: ZoneValue;
     aclaraciones: string;
   };
   subtotal: number;
@@ -90,6 +109,8 @@ export interface Sale {
   mp: { preferenceId?: string; paymentId?: string };
   invoiceId?: string;
   status: SaleStatus;
+  statusHistory: StatusHistoryEntry[];
+  geo?: { lat: number; lng: number; status: "pending" | "ok" | "fallback" };
   createdAt: string;
 }
 
@@ -99,10 +120,15 @@ export interface Customer {
   phone: string;
   email: string;
   address: string;
+  zona: ZoneValue;
   docTipo: "DNI" | "CUIT" | "CF";
   docNro: string;
   condicionIVA: string;
   notes?: string;
+  // Agregados calculados server-side (join con Sale).
+  orderCount?: number;
+  totalSpent?: number;
+  lastOrderAt?: string;
 }
 
 export interface CashSession {
@@ -232,15 +258,26 @@ export interface FiscalConfig {
 }
 
 export interface Zone {
-  name: string;
+  name: ZoneValue;
   cost: number;
   active: boolean;
 }
+
+export interface DaySchedule {
+  open: string; // "09:00"
+  close: string; // "20:00"
+  closed: boolean;
+}
+export const WEEKDAYS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+export type WeekSchedule = Record<Weekday, DaySchedule>;
 
 export interface Settings {
   zones: Zone[];
   freeShippingFrom: number;
   minOrder: number;
+  schedule: WeekSchedule;
+  forceClosed: boolean;
 }
 
 export interface Business {
@@ -249,6 +286,7 @@ export interface Business {
   whatsapp: string;
   phone: string;
   email: string;
+  address: string;
   hours: string;
   branches: { id: string; name: string; address: string; mapsUrl: string }[];
 }
@@ -284,4 +322,5 @@ export interface DashboardReport {
   lowStock: number;
   salesByDay: { date: string; total: number }[];
   byBranch: { branchId: string; branchName: string; salesToday: number; salesMonth: number }[];
+  byZone: { zona: ZoneValue; label: string; total: number }[];
 }

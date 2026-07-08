@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Drumstick, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,10 +33,12 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Drumstick className="h-6 w-6" />
-          </div>
-          <CardTitle>Granja La Unión</CardTitle>
+          <img
+            src="/images/logo.webp"
+            alt="Granja La Unión"
+            className="mb-2 h-16 w-16 rounded-full object-cover shadow-sm ring-2 ring-primary/20"
+          />
+          <CardTitle className="font-display text-2xl">Granja La Unión</CardTitle>
           <CardDescription>Panel de gestión del negocio</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -59,19 +61,6 @@ export function LoginPage() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Entrar
             </Button>
           </form>
-
-          <div className="relative py-1 text-center text-xs text-muted-foreground">
-            <span className="bg-card px-2">Accesos rápidos (demo)</span>
-          </div>
-
-          <div className="grid gap-2">
-            <Button variant="outline" className="h-11" disabled={loading} onClick={() => doLogin("dueno@granjalaunion.com", "demo")}>
-              Entrar como Dueño
-            </Button>
-            <Button variant="outline" className="h-11" disabled={loading} onClick={() => doLogin("ostende@granjalaunion.com", "demo")}>
-              Entrar como Encargado Ostende
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

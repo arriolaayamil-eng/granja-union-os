@@ -4,12 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { SaleStatus } from "@/lib/api/types";
+import { ZONE_LABELS, type SaleStatus, type ZoneValue } from "@/lib/api/types";
 
 // ── Badge de estado de venta ──
 const saleStatusMap: Record<SaleStatus, { label: string; className: string }> = {
   pending_payment: { label: "🟡 Esperando pago", className: "bg-amber-100 text-amber-800 border-amber-200" },
   paid: { label: "🟢 Pagado", className: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  en_preparacion: { label: "🧑‍🍳 En preparación", className: "bg-blue-100 text-blue-800 border-blue-200" },
+  en_camino: { label: "🚴 En camino", className: "bg-indigo-100 text-indigo-800 border-indigo-200" },
+  entregado: { label: "🔵 Entregado", className: "bg-sky-100 text-sky-800 border-sky-200" },
   fulfilled: { label: "🔵 Entregado", className: "bg-sky-100 text-sky-800 border-sky-200" },
   rejected: { label: "❌ Rechazado", className: "bg-red-100 text-red-800 border-red-200" },
   cancelled: { label: "Cancelado", className: "bg-muted text-muted-foreground" },
@@ -18,6 +21,10 @@ const saleStatusMap: Record<SaleStatus, { label: string; className: string }> = 
 export function StatusBadge({ status }: { status: SaleStatus }) {
   const s = saleStatusMap[status];
   return <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium", s.className)}>{s.label}</span>;
+}
+
+export function ZoneLabel({ zona }: { zona: ZoneValue }) {
+  return <span>{ZONE_LABELS[zona] ?? zona}</span>;
 }
 
 // ── Badge de fase (Próximamente) ──

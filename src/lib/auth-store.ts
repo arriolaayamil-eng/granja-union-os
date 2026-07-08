@@ -54,10 +54,15 @@ export function setActiveBranch(branchId: string) {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(() => getStoredUser());
-  const [activeBranch, setActiveBranchState] = useState<string>(() => getActiveBranch());
+  // Iniciar en null/"all" para que el primer render del cliente coincida con el SSR
+  // (localStorage no existe en el server). Se hidrata en el effect → evita el
+  // hydration mismatch (React #418).
+  const [user, setUser] = useState<User | null>(null);
+  const [activeBranch, setActiveBranchState] = useState<string>("all");
 
   useEffect(() => {
+    setUser(getStoredUser());
+    setActiveBranchState(getActiveBranch());
     const listener = () => {
       setUser(getStoredUser());
       setActiveBranchState(getActiveBranch());

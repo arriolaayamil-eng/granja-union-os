@@ -57,7 +57,7 @@ export async function request<T>(
 
     if (res.status === 401) {
       clearToken();
-      if (typeof window !== "undefined") window.location.assign("/admin/login");
+      if (typeof window !== "undefined") window.location.assign("/login");
       throw new Error("No autorizado");
     }
 

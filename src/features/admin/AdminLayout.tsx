@@ -62,28 +62,29 @@ import { useAuth } from "@/lib/auth-store";
 import { roleLabel, formatDate } from "@/lib/format";
 import { getBranches } from "@/lib/api/branches";
 import { getNotifications, markNotificationRead } from "@/lib/api/notifications";
+import { isCoreMode } from "@/lib/features";
 
-type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; generalOnly?: boolean };
+type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; generalOnly?: boolean; core?: boolean };
 
 const NAV: NavItem[] = [
-  { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/ventas", label: "Ventas", icon: ShoppingCart },
+  { to: "/admin", label: "Dashboard", icon: LayoutDashboard, core: true },
+  { to: "/admin/ventas", label: "Pedidos", icon: ShoppingCart, core: true },
   { to: "/admin/caja", label: "Caja", icon: DollarSign },
-  { to: "/admin/catalogo", label: "Catálogo", icon: Drumstick },
+  { to: "/admin/catalogo", label: "Catálogo", icon: Drumstick, core: true },
   { to: "/admin/stock", label: "Stock", icon: Package },
   { to: "/admin/compras", label: "Compras / Proveedores", icon: Truck },
   { to: "/admin/gastos", label: "Gastos y Vencimientos", icon: Clock },
   { to: "/admin/facturacion", label: "Facturación", icon: Receipt },
   { to: "/admin/reportes", label: "Contabilidad / Reportes", icon: Calculator },
-  { to: "/admin/clientes", label: "Clientes", icon: Users },
+  { to: "/admin/clientes", label: "Clientes", icon: Users, core: true },
   { to: "/admin/sucursales", label: "Sucursales y Usuarios", icon: Building2, generalOnly: true },
-  { to: "/admin/config", label: "Integraciones y Config", icon: Settings, generalOnly: true },
+  { to: "/admin/config", label: "Configuración", icon: Settings, generalOnly: true, core: true },
 ];
 
 const BOTTOM_NAV: NavItem[] = [
-  { to: "/admin", label: "Inicio", icon: LayoutDashboard },
-  { to: "/admin/ventas", label: "Ventas", icon: ShoppingCart },
-  { to: "/admin/catalogo", label: "Catálogo", icon: Drumstick },
+  { to: "/admin", label: "Inicio", icon: LayoutDashboard, core: true },
+  { to: "/admin/ventas", label: "Pedidos", icon: ShoppingCart, core: true },
+  { to: "/admin/catalogo", label: "Catálogo", icon: Drumstick, core: true },
   { to: "/admin/gastos", label: "Gastos", icon: Clock },
 ];
 
@@ -94,7 +95,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
 
-  const items = NAV.filter((i) => !i.generalOnly || isGeneral);
+  const items = NAV.filter((i) => (!i.generalOnly || isGeneral) && (!isCoreMode() || i.core));
+  const bottomItems = BOTTOM_NAV.filter((i) => !isCoreMode() || i.core);
 
   const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: getBranches });
   const { data: notifications = [], refetch } = useQuery({
@@ -139,8 +141,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       {/* Sidebar desktop */}
       <aside className="hidden w-64 shrink-0 border-r bg-card lg:block">
         <div className="flex h-16 items-center gap-2 border-b px-4">
-          <Drumstick className="h-6 w-6 text-primary" />
-          <span className="font-bold">Granja La Unión</span>
+          <img src="/images/logo.webp" alt="Granja La Unión" className="h-9 w-9 rounded-full object-cover" />
+          <span className="font-display text-lg font-bold tracking-tight">Granja La Unión</span>
         </div>
         <div className="p-3">
           <NavList />
@@ -159,8 +161,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="flex h-16 flex-row items-center gap-2 border-b px-4">
-                <Drumstick className="h-6 w-6 text-primary" />
-                <SheetTitle>Granja La Unión</SheetTitle>
+                <img src="/images/logo.webp" alt="Granja La Unión" className="h-9 w-9 rounded-full object-cover" />
+                <SheetTitle className="font-display">Granja La Unión</SheetTitle>
               </SheetHeader>
               <div className="p-3">
                 <NavList onClick={() => setDrawerOpen(false)} />
@@ -168,7 +170,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
 
-          <Drumstick className="h-6 w-6 shrink-0 text-primary lg:hidden" />
+          <img src="/images/logo.webp" alt="Granja La Unión" className="h-8 w-8 shrink-0 rounded-full object-cover lg:hidden" />
 
           {/* Selector de sucursal (solo general) */}
           {isGeneral ? (
@@ -271,8 +273,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         <main className="min-w-0 flex-1 p-4 pb-24 sm:p-6 lg:pb-6">{children}</main>
 
         {/* Bottom nav mobile */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t bg-card lg:hidden">
-          {BOTTOM_NAV.map((item) => (
+        <nav
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-30 grid border-t bg-card lg:hidden",
+            bottomItems.length === 2 ? "grid-cols-2" : bottomItems.length === 3 ? "grid-cols-3" : "grid-cols-4",
+          )}
+        >
+          {bottomItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,6 @@ export function CatalogoPage() {
             const ov = overrides.find((o) => o.branchId === scopeBranch && o.productId === p.id);
             const price = ov?.price ?? p.basePrice;
             const available = ov?.active ?? p.active;
-            const margin = p.basePrice > 0 ? Math.round(((p.basePrice - p.cost) / p.basePrice) * 100) : 0;
             return (
               <Card key={p.id}>
                 <CardContent className="p-4">
@@ -143,12 +142,13 @@ export function CatalogoPage() {
                       ) : (
                         <Badge variant="outline" className="text-amber-600">sin precio — no se vende online</Badge>
                       )}
-                      <p className="text-xs text-muted-foreground">Costo {formatCurrency(p.cost)} · Margen {margin}%</p>
                     </div>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between border-t pt-3">
-                    <span className="text-sm">{available ? "Hoy hay" : "Hoy no hay"}</span>
+                    <span className={`text-sm font-medium ${available ? "text-emerald-600" : "text-muted-foreground"}`}>
+                      {available ? "Disponible" : "Agotado"}
+                    </span>
                     <Switch checked={available} onCheckedChange={() => toggleAvail.mutate(p)} />
                   </div>
                 </CardContent>
@@ -187,10 +187,6 @@ function ProductForm({
   saving: boolean;
 }) {
   const [form, setForm] = useState<Product>(product);
-  const margin = useMemo(
-    () => (form.basePrice > 0 ? Math.round(((form.basePrice - form.cost) / form.basePrice) * 100) : 0),
-    [form.basePrice, form.cost],
-  );
   const set = (patch: Partial<Product>) => setForm((f) => ({ ...f, ...patch }));
 
   return (
@@ -227,20 +223,9 @@ function ProductForm({
             <Label>Precio base</Label>
             <Input type="number" value={form.basePrice} onChange={(e) => set({ basePrice: +e.target.value })} />
           </div>
-          <div className="space-y-1">
-            <Label>Costo</Label>
-            <Input type="number" value={form.cost} onChange={(e) => set({ cost: +e.target.value })} />
-          </div>
-          <div className="space-y-1">
-            <Label>IVA %</Label>
-            <Input type="number" value={form.taxRate} onChange={(e) => set({ taxRate: +e.target.value })} />
-          </div>
-          <div className="flex items-end">
-            <p className="text-sm text-muted-foreground">Margen: <span className="font-semibold text-foreground">{margin}%</span></p>
-          </div>
         </div>
         <div className="flex items-center justify-between rounded-lg border p-3">
-          <Label>Activo</Label>
+          <Label>{form.active ? "Disponible" : "Agotado"}</Label>
           <Switch checked={form.active} onCheckedChange={(v) => set({ active: v })} />
         </div>
       </div>

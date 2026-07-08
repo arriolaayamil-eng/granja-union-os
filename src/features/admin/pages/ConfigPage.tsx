@@ -24,7 +24,7 @@ import {
 import { getSettings, saveSettings, getBusiness, saveBusiness, getOffer, saveOffer } from "@/lib/api/business";
 import { getExpenseCategories, saveCategory } from "@/lib/api/expenses";
 import { formatDate } from "@/lib/format";
-import type { FiscalConfig, IntegrationStatus, PaymentConfig } from "@/lib/api/types";
+import { ZONE_LABELS, ZONES, WEEKDAYS, type FiscalConfig, type IntegrationStatus, type PaymentConfig, type Weekday } from "@/lib/api/types";
 
 const statusMap: Record<IntegrationStatus, { label: string; cls: string }> = {
   not_configured: { label: "🔴 No configurado", cls: "bg-red-100 text-red-800" },
@@ -40,29 +40,30 @@ export function ConfigPage() {
 
   return (
     <div>
-      <PageHeader title="Integraciones y Configuración" subtitle="Conexiones nativas y ajustes del negocio" />
+      <PageHeader title="Configuración" subtitle="Horarios, zonas, contacto e integraciones del negocio" />
 
-      <div className="mb-4 rounded-lg border bg-primary/5 p-3 text-sm">
-        El resto del sistema ya está cableado a estas conexiones: <strong>al activarlas, empieza a operar.</strong>
-      </div>
-
-      <Tabs defaultValue="integrations">
+      <Tabs defaultValue="horarios">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="integrations">Integraciones</TabsTrigger>
+          <TabsTrigger value="horarios">Horarios</TabsTrigger>
           <TabsTrigger value="shipping">Envíos</TabsTrigger>
-          <TabsTrigger value="banner">Banner</TabsTrigger>
           <TabsTrigger value="business">Negocio</TabsTrigger>
+          <TabsTrigger value="banner">Banner</TabsTrigger>
+          <TabsTrigger value="integrations">Integraciones</TabsTrigger>
           <TabsTrigger value="categories">Categorías</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="horarios" className="mt-4"><HorariosSection /></TabsContent>
+        <TabsContent value="shipping" className="mt-4"><ShippingSection /></TabsContent>
+        <TabsContent value="business" className="mt-4"><BusinessSection /></TabsContent>
+        <TabsContent value="banner" className="mt-4"><BannerSection /></TabsContent>
+
         <TabsContent value="integrations" className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mb-2 rounded-lg border bg-primary/5 p-3 text-sm lg:col-span-2">
+            El resto del sistema ya está cableado a estas conexiones: <strong>al activarlas, empieza a operar.</strong>
+          </div>
           <PaymentCard config={payment} />
           <FiscalCard config={fiscal} />
         </TabsContent>
-
-        <TabsContent value="shipping" className="mt-4"><ShippingSection /></TabsContent>
-        <TabsContent value="banner" className="mt-4"><BannerSection /></TabsContent>
-        <TabsContent value="business" className="mt-4"><BusinessSection /></TabsContent>
         <TabsContent value="categories" className="mt-4"><CategoriesSection /></TabsContent>
       </Tabs>
     </div>
@@ -166,6 +167,73 @@ function FiscalCard({ config }: { config: FiscalConfig }) {
   );
 }
 
+const WEEKDAY_LABELS: Record<Weekday, string> = {
+  lunes: "Lunes", martes: "Martes", miercoles: "Miércoles", jueves: "Jueves",
+  viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
+};
+
+function HorariosSection() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
+  const [form, setForm] = useState(data);
+  useEffect(() => setForm(data), [data]);
+  const save = useMutation({ mutationFn: saveSettings, onSuccess: () => { qc.invalidateQueries({ queryKey: ["settings"] }); toast.success("Horarios guardados"); } });
+  if (!form) return <Loading />;
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Horarios de atención</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {WEEKDAYS.map((day) => {
+            const d = form.schedule[day];
+            return (
+              <div key={day} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-sm">{WEEKDAY_LABELS[day]}</span>
+                <Input
+                  type="time"
+                  className="w-28"
+                  disabled={d.closed}
+                  value={d.open}
+                  onChange={(e) => setForm({ ...form, schedule: { ...form.schedule, [day]: { ...d, open: e.target.value } } })}
+                />
+                <span className="text-xs text-muted-foreground">a</span>
+                <Input
+                  type="time"
+                  className="w-28"
+                  disabled={d.closed}
+                  value={d.close}
+                  onChange={(e) => setForm({ ...form, schedule: { ...form.schedule, [day]: { ...d, close: e.target.value } } })}
+                />
+                <div className="ml-auto flex items-center gap-2">
+                  <Switch checked={!d.closed} onCheckedChange={(v) => setForm({ ...form, schedule: { ...form.schedule, [day]: { ...d, closed: !v } } })} />
+                  <span className="text-xs text-muted-foreground">{d.closed ? "Cerrado" : "Abierto"}</span>
+                </div>
+              </div>
+            );
+          })}
+          <Button className="mt-2" onClick={() => save.mutate(form)} disabled={save.isPending}>Guardar</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Override manual</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label>Cerrado ahora</Label>
+              <p className="text-xs text-muted-foreground">Para feriados o imprevistos: fuerza "cerrado" en el sitio sin importar el horario.</p>
+            </div>
+            <Switch checked={form.forceClosed} onCheckedChange={(v) => setForm({ ...form, forceClosed: v })} />
+          </div>
+          <Button variant={form.forceClosed ? "default" : "outline"} onClick={() => save.mutate(form)} disabled={save.isPending}>
+            {form.forceClosed ? "Guardar (sitio forzado a cerrado)" : "Guardar"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function ShippingSection() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
@@ -175,13 +243,16 @@ function ShippingSection() {
   if (!form) return <Loading />;
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base">Envíos</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base">Zonas de entrega</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         {form.zones.map((z, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Input value={z.name} onChange={(e) => { const zones = [...form.zones]; zones[i] = { ...z, name: e.target.value }; setForm({ ...form, zones }); }} />
+          <div key={z.name} className="flex items-center gap-2">
+            <span className="w-40 shrink-0 text-sm font-medium">{ZONE_LABELS[z.name]}</span>
             <Input type="number" className="w-32" value={z.cost} onChange={(e) => { const zones = [...form.zones]; zones[i] = { ...z, cost: +e.target.value }; setForm({ ...form, zones }); }} />
-            <Switch checked={z.active} onCheckedChange={(v) => { const zones = [...form.zones]; zones[i] = { ...z, active: v }; setForm({ ...form, zones }); }} />
+            <div className="flex items-center gap-2">
+              <Switch checked={z.active} onCheckedChange={(v) => { const zones = [...form.zones]; zones[i] = { ...z, active: v }; setForm({ ...form, zones }); }} />
+              <span className="text-xs text-muted-foreground">{z.active ? "Activa" : "Inactiva"}</span>
+            </div>
           </div>
         ))}
         <div className="grid grid-cols-2 gap-3">
@@ -248,6 +319,7 @@ function BusinessSection() {
           <div className="space-y-1"><Label>Teléfono</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
         </div>
         <div className="space-y-1"><Label>Email de avisos</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+        <div className="space-y-1"><Label>Dirección</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
         <div className="space-y-1"><Label>Horarios</Label><Input value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })} /></div>
         <Button onClick={() => save.mutate(form)} disabled={save.isPending}>Guardar</Button>
       </CardContent>
