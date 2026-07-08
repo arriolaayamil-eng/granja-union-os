@@ -1,5 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { MessageCircle, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,17 +46,34 @@ import {
   StatusBadge,
   ZoneLabel,
 } from "@/features/admin/components/shared";
-import { getSales, transitionSale, updateSaleZona } from "@/lib/api/sales";
+import { getSales, transitionSale, updateSaleZona, MANUAL_MOVES, type ManualTransitionTarget } from "@/lib/api/sales";
 import { getBranches } from "@/lib/api/branches";
 import { getProducts } from "@/lib/api/products";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth-store";
+import { cn } from "@/lib/utils";
 import { ZONES, ZONE_LABELS } from "@/lib/api/types";
 import type { Sale, SaleStatus, ZoneValue } from "@/lib/api/types";
 
 // Ocultados por pedido puntual — el código queda intacto para reactivar fácil.
 const SHOW_POS_TAB = false;
 const SHOW_ZONE_FILTER = false;
+
+// Tablero tipo pipeline (drag and drop) en vez del filtro con tabs + lista.
+// Reversible: si algo falla, poner en false vuelve al comportamiento anterior sin tocar nada más.
+const USE_PIPELINE_BOARD = true;
+
+const PIPELINE_COLUMNS: { status: "paid" | "en_preparacion" | "en_camino" | "entregado" | "cancelled"; label: string }[] = [
+  { status: "paid", label: "Pagados" },
+  { status: "en_preparacion", label: "En preparación" },
+  { status: "en_camino", label: "En camino" },
+  { status: "entregado", label: "Entregados" },
+  { status: "cancelled", label: "Cancelados" },
+];
+
+function columnOf(status: SaleStatus): string {
+  return status === "fulfilled" ? "entregado" : status;
+}
 
 const STATUS_FILTERS = [
   { value: "paid,en_preparacion", label: "Pedidos por entregar" },
@@ -77,7 +103,7 @@ export function PedidosPage() {
   const [filter, setFilter] = useState("paid,en_preparacion");
   const [zonaFilter, setZonaFilter] = useState<string>("all");
   const [detail, setDetail] = useState<Sale | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ sale: Sale; to: "en_preparacion" | "en_camino" | "entregado" | "cancelled"; label: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ sale: Sale; to: ManualTransitionTarget; label: string } | null>(null);
 
   const { data: branches = [] } = useQuery({ queryKey: ["branches"], queryFn: getBranches });
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
@@ -85,12 +111,14 @@ export function PedidosPage() {
   const { data: sales, isLoading, isError, refetch } = useQuery({
     queryKey: ["sales", activeBranch, filter, zonaFilter],
     queryFn: () => getSales(activeBranch, filter === "all" ? undefined : filter, zonaFilter === "all" ? undefined : zonaFilter),
+    enabled: !USE_PIPELINE_BOARD,
   });
 
   const transition = useMutation({
-    mutationFn: ({ id, to }: { id: string; to: "en_preparacion" | "en_camino" | "entregado" | "cancelled" }) => transitionSale(id, to),
+    mutationFn: ({ id, to }: { id: string; to: ManualTransitionTarget }) => transitionSale(id, to),
     onSuccess: (sale) => {
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["sales-pipeline"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(sale.status === "cancelled" ? "Pedido cancelado" : "Estado actualizado");
       setConfirmAction(null);
@@ -103,6 +131,7 @@ export function PedidosPage() {
     mutationFn: ({ id, zona }: { id: string; zona: ZoneValue }) => updateSaleZona(id, zona),
     onSuccess: (sale) => {
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["sales-pipeline"] });
       qc.invalidateQueries({ queryKey: ["customers"] });
       toast.success("Zona actualizada");
       setDetail(sale);
@@ -113,6 +142,18 @@ export function PedidosPage() {
     <div>
       <PageHeader title="Pedidos" subtitle="Pedidos web en tiempo real" />
 
+      {USE_PIPELINE_BOARD && (
+        <PipelineBoard
+          activeBranch={activeBranch}
+          isGeneral={isGeneral}
+          branchName={branchName}
+          onOpenDetail={setDetail}
+          onConfirmCancel={(sale) => setConfirmAction({ sale, to: "cancelled", label: "Cancelar pedido" })}
+          onTransition={(id, to) => transition.mutate({ id, to })}
+        />
+      )}
+
+      {!USE_PIPELINE_BOARD && (
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={filter} onValueChange={setFilter}>
@@ -192,6 +233,7 @@ export function PedidosPage() {
           </div>
         )}
       </div>
+      )}
 
       {SHOW_POS_TAB && <PosPlaceholder />}
 
@@ -318,6 +360,163 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
     <div className={`flex justify-between ${bold ? "font-bold" : "text-muted-foreground"}`}>
       <span>{label}</span>
       <span className="tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+// ── Tablero pipeline (drag and drop) ──
+
+function PipelineBoard({
+  activeBranch,
+  isGeneral,
+  branchName,
+  onOpenDetail,
+  onConfirmCancel,
+  onTransition,
+}: {
+  activeBranch: string;
+  isGeneral: boolean;
+  branchName: (id: string) => string;
+  onOpenDetail: (sale: Sale) => void;
+  onConfirmCancel: (sale: Sale) => void;
+  onTransition: (id: string, to: ManualTransitionTarget) => void;
+}) {
+  const { data: sales, isLoading, isError, refetch } = useQuery({
+    queryKey: ["sales-pipeline", activeBranch],
+    queryFn: () => getSales(activeBranch, "paid,en_preparacion,en_camino,entregado,fulfilled,cancelled"),
+  });
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  if (isLoading) return <ListSkeleton />;
+  if (isError) return <ErrorState onRetry={refetch} />;
+
+  const grouped: Record<string, Sale[]> = {};
+  for (const col of PIPELINE_COLUMNS) grouped[col.status] = [];
+  for (const s of sales ?? []) {
+    const col = columnOf(s.status);
+    if (grouped[col]) grouped[col].push(s);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const saleId = String(event.active.id);
+    const fromRaw = event.active.data.current?.status as SaleStatus | undefined;
+    const toStatus = event.over ? String(event.over.id) : null;
+    if (!fromRaw || !toStatus) return;
+    if (toStatus === columnOf(fromRaw)) return; // soltado en la misma columna
+
+    const allowed = (MANUAL_MOVES[fromRaw] || []) as string[];
+    if (!allowed.includes(toStatus)) {
+      toast.error("Ese movimiento no está permitido");
+      return;
+    }
+    if (toStatus === "cancelled") {
+      const sale = (sales ?? []).find((s) => s.id === saleId);
+      if (sale) onConfirmCancel(sale);
+      return;
+    }
+    onTransition(saleId, toStatus as ManualTransitionTarget);
+  }
+
+  return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {PIPELINE_COLUMNS.map((col) => (
+          <PipelineColumn
+            key={col.status}
+            status={col.status}
+            label={col.label}
+            sales={grouped[col.status]}
+            isGeneral={isGeneral}
+            branchName={branchName}
+            onOpen={onOpenDetail}
+          />
+        ))}
+      </div>
+    </DndContext>
+  );
+}
+
+function PipelineColumn({
+  status,
+  label,
+  sales,
+  isGeneral,
+  branchName,
+  onOpen,
+}: {
+  status: string;
+  label: string;
+  sales: Sale[];
+  isGeneral: boolean;
+  branchName: (id: string) => string;
+  onOpen: (sale: Sale) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const draggableCol = ((MANUAL_MOVES[status as SaleStatus] || []) as string[]).length > 0;
+  const total = sales.reduce((a, s) => a + s.total, 0);
+
+  return (
+    <div className="flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30">
+      <div className="flex items-center justify-between gap-2 border-b p-3">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{sales.length} · {formatCurrency(total)}</span>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={cn("min-h-32 flex-1 space-y-2 overflow-y-auto p-2 transition-colors", isOver && "bg-primary/10")}
+      >
+        {sales.length === 0 && <p className="p-3 text-center text-xs text-muted-foreground">Sin pedidos</p>}
+        {sales.map((s) => (
+          <PipelineCard key={s.id} sale={s} draggable={draggableCol} isGeneral={isGeneral} branchName={branchName} onOpen={onOpen} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PipelineCard({
+  sale,
+  draggable,
+  isGeneral,
+  branchName,
+  onOpen,
+}: {
+  sale: Sale;
+  draggable: boolean;
+  isGeneral: boolean;
+  branchName: (id: string) => string;
+  onOpen: (sale: Sale) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: sale.id,
+    data: { status: sale.status },
+    disabled: !draggable,
+  });
+  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(draggable ? { ...attributes, ...listeners } : {})}
+      onClick={() => onOpen(sale)}
+      className={cn(
+        "rounded-lg border bg-card p-3 text-sm shadow-sm select-none",
+        draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
+        isDragging && "z-10 opacity-60 shadow-md",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">{sale.code}</span>
+        <span className="shrink-0 text-xs font-bold tabular-nums">{formatCurrency(sale.total)}</span>
+      </div>
+      <p className="mt-1 truncate text-xs text-muted-foreground">
+        {sale.customer.nombre} · <ZoneLabel zona={sale.customer.zona} />
+      </p>
+      <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{formatDate(sale.createdAt)}</span>
+        {isGeneral && <span className="truncate">{branchName(sale.branchId)}</span>}
+      </div>
     </div>
   );
 }

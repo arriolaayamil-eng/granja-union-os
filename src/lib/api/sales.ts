@@ -20,17 +20,21 @@ export function getSales(branch?: string, status?: string, zona?: string): Promi
   });
 }
 
-const MANUAL_NEXT: Partial<Record<SaleStatus, SaleStatus>> = {
-  paid: "en_preparacion",
-  en_preparacion: "en_camino",
-  en_camino: "entregado",
+export type ManualTransitionTarget = "paid" | "en_preparacion" | "en_camino" | "entregado" | "cancelled";
+
+// Espejo de api/src/lib/saleTransitions.js: Pagado/En preparación/En camino son reversibles entre
+// sí (ej: el envío no encontró al cliente y vuelve a preparación); Entregado y Cancelado son finales.
+export const MANUAL_MOVES: Partial<Record<SaleStatus, ManualTransitionTarget[]>> = {
+  paid: ["en_preparacion", "cancelled"],
+  en_preparacion: ["paid", "en_camino", "cancelled"],
+  en_camino: ["en_preparacion", "entregado", "cancelled"],
 };
 
-/** Transición manual de estado (nunca "paid": eso lo pone el webhook de MP). */
-export function transitionSale(id: string, to: "en_preparacion" | "en_camino" | "entregado" | "cancelled"): Promise<Sale> {
+/** Transición manual de estado ("paid" como destino solo vale volviendo desde "en_preparacion"). */
+export function transitionSale(id: string, to: ManualTransitionTarget): Promise<Sale> {
   return request<Sale>(`/sales/${id}/transition`, { method: "PUT", body: { to } }, () => {
     const s = sales.find((x) => x.id === id)!;
-    if (to !== "cancelled" && MANUAL_NEXT[s.status] !== to) throw new Error(`No se puede pasar de "${s.status}" a "${to}"`);
+    if (!(MANUAL_MOVES[s.status] || []).includes(to)) throw new Error(`No se puede pasar de "${s.status}" a "${to}"`);
     s.status = to;
     s.statusHistory = [...s.statusHistory, { status: to, at: new Date().toISOString() }];
     return delay(s);
