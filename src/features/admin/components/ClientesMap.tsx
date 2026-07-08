@@ -1,6 +1,5 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -25,23 +24,27 @@ export default function ClientesMap({ sales }: { sales: Sale[] }) {
   const withGeo = sales.filter((s) => s.geo && s.geo.status !== "pending");
 
   return (
-    <MapContainer center={CENTER} zoom={12} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {withGeo.map((s) => (
-        <Marker key={s.id} position={[s.geo!.lat, s.geo!.lng]} icon={defaultIcon}>
-          <Popup>
-            <div className="text-sm">
-              <p className="font-semibold">{s.customer.nombre}</p>
-              <p>{ZONE_LABELS[s.customer.zona] ?? s.customer.zona}</p>
-              <p>{formatCurrency(s.total)}</p>
-              <p className="text-xs text-muted-foreground">{formatDate(s.createdAt)}</p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+    // Contenedor de blindaje: aunque el CSS de Leaflet no llegue a tiempo o cambien sus z-index
+    // internos, el mapa no puede escaparse visualmente ni competir en stacking con el header sticky.
+    <div className="relative h-full w-full overflow-hidden isolate">
+      <MapContainer center={CENTER} zoom={12} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {withGeo.map((s) => (
+          <Marker key={s.id} position={[s.geo!.lat, s.geo!.lng]} icon={defaultIcon}>
+            <Popup>
+              <div className="text-sm">
+                <p className="font-semibold">{s.customer.nombre}</p>
+                <p>{ZONE_LABELS[s.customer.zona] ?? s.customer.zona}</p>
+                <p>{formatCurrency(s.total)}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(s.createdAt)}</p>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
   );
 }
