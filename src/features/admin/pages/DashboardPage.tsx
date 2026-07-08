@@ -24,6 +24,9 @@ import { cn } from "@/lib/utils";
 // Leaflet toca `window`/`document`: solo se importa en el cliente (nunca en SSR).
 const ClientesMap = lazy(() => import("@/features/admin/components/ClientesMap"));
 
+// Ocultada por pedido puntual — el componente queda intacto para reactivarla fácil.
+const SHOW_BRANCH_COMPARISON = false;
+
 export function DashboardPage() {
   const { activeBranch, isGeneral } = useAuth();
   const [mounted, setMounted] = useState(false);
@@ -63,8 +66,8 @@ export function DashboardPage() {
         )}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className={cn("mt-4 grid gap-4", SHOW_BRANCH_COMPARISON && "lg:grid-cols-3")}>
+        <Card className={cn(SHOW_BRANCH_COMPARISON && "lg:col-span-2")}>
           <CardHeader>
             <CardTitle className="text-base">Ventas últimos 14 días</CardTitle>
           </CardHeader>
@@ -86,7 +89,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {isGeneral && (
+        {SHOW_BRANCH_COMPARISON && isGeneral && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Comparativa por sucursal</CardTitle>
